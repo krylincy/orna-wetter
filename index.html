@@ -1,0 +1,399 @@
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link
+      rel="stylesheet"
+      type="text/css"
+      href="https://stackpath.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css"
+    />
+  </head>
+
+  <body>
+    <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+
+    <div id="app">
+      <div class="section">
+        <h3>Weather for today ({{dayNames[(todayPointer) % 7]}})</h3>
+        <span>{{new Date().toLocaleDateString("de")}}</span>
+      </div>
+      <div class="section">
+        <ul class="weather-list">
+          <li
+            v-for="(weatherSlot, index) in todayWeather"
+            :key="index"
+            class="slot"
+            :class="index == activeSlot ? 'selected' : ''"
+            @click="setActiveSlot(weatherSlot.weatherEnum, index)"
+          >
+            <span class="icon" :style="`background-color: ${weatherSlot.color}; border-color: ${weatherSlot.color}`"
+              ><i :class="`fa fa-${weatherSlot.icon}`"></i
+            ></span>
+            <span class="time"><i class="fa fa-clock-o"></i>{{index}}</span>
+          </li>
+        </ul>
+      </div>
+
+      <div class="section selection">
+        <span
+          v-for="option in changeWeatherSelection"
+          class="forecast-icon"
+          :class="option.weatherEnum !== selectedWeather ? 'inactive' : ''"
+          :style="`background-color: ${option.color};`"
+          @click="selectedWeather = option.weatherEnum"
+          ><i :class="`fa fa-${option.icon}`"></i
+        ></span>
+        <a class="button" @click="saveNewWeather"
+          >Save for&nbsp;&nbsp;<span class="time"><i class="fa fa-clock-o"></i> {{activeSlot}}</span></a
+        >
+      </div>
+      <div class="section">
+        <h3>Weather for the next week</h3>
+        <span v-if="getRemanningDaysInMonth() < 6">
+          <i class="fa fa-exclamation-triangle" aria-hidden="true"></i> The weather slots are reset at the turn of the month.
+          Affected days are marked in forecast.
+        </span>
+      </div>
+      <div class="section">
+        <div class="forecast-title">
+          <span v-for="index in 6" :key="index" :class="index > getRemanningDaysInMonth() ? 'warning-text' : ''"
+            >{{dayNames[(index + todayPointer) % 7]}}</span
+          >
+        </div>
+        <ul class="forecast-list forecast-list--legend">
+          <li class="forecast-list__item" v-for="index in 24" :key="index">
+            <span class="forecast-icon"><i class="fa fa-clock-o"></i> {{index - 1}}</span>
+          </li>
+        </ul>
+        <ul
+          class="forecast-list"
+          v-for="(forecastDay, index) in forecast"
+          :class="index + 1 > getRemanningDaysInMonth() ? 'warning-icon' : ''"
+        >
+          <li class="forecast-list__item" v-for="(forecastSlot, index) in forecastDay">
+            <span class="forecast-icon" :style="`background-color: ${forecastSlot.color}; border-color: ${forecastSlot.color}`"
+              ><i :class="`fa fa-${forecastSlot.icon}`"></i
+            ></span>
+          </li>
+        </ul>
+      </div>
+      <div class="section">
+        <h3>Configuration</h3>
+        <div>
+          <a class="button" @click="resetWeather('Reset all saved weather information?')">RESET all Data</a>
+        </div>
+        <div>Initial data saved: {{initialSave}}</div>
+        <div>Month: {{initialMonth}}</div>
+      </div>
+    </div>
+
+    <script>
+      var app = new Vue({
+        el: '#app',
+        data: {
+          weatherArray: JSON.parse(localStorage.getItem('weather')) || new Array(23).fill(null), // none = 0, sun/moon = 1, rain = 2, snow= 3,  unknown= null
+
+          activeSlot: 0,
+          selectedWeather: null,
+          dayNames: ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'],
+          triggerResetMonthData: true,
+        },
+        computed: {
+          initialSave: function () {
+            let time = localStorage.getItem('fistSave');
+            return time ? new Date(Number(time)) : '-';
+          },
+          initialMonth: function () {
+            let month = localStorage.getItem('currentMonth');
+            return month ? Number(month) + 1 : '-';
+          },
+          todayWeather: function () {
+            return this.calcFullDayArray();
+          },
+          changeWeatherSelection: function () {
+            return [
+              this.calcWeatherObject(null, this.activeSlot),
+              this.calcWeatherObject(0, this.activeSlot),
+              this.calcWeatherObject(1, this.activeSlot),
+              this.calcWeatherObject(2, this.activeSlot),
+              this.calcWeatherObject(3, this.activeSlot),
+            ];
+          },
+          forecast: function () {
+            return [
+              this.calcFullDayArray(1),
+              this.calcFullDayArray(2),
+              this.calcFullDayArray(3),
+              this.calcFullDayArray(4),
+              this.calcFullDayArray(5),
+              this.calcFullDayArray(6),
+            ];
+          },
+          todayPointer: function () {
+            let today = new Date();
+            return today.getDay();
+          },
+        },
+        watch: {},
+        methods: {
+          setActiveSlot: function (weatherEnum, slot = null) {
+            if (slot !== null) {
+              this.selectedWeather = weatherEnum;
+              this.activeSlot = slot;
+            } else {
+              let today = new Date();
+              this.activeSlot = today.getHours();
+              this.selectedWeather = this.todayWeather[this.activeSlot].weatherEnum;
+            }
+          },
+          calcWeatherObject: function (weatherEnum, hour) {
+            switch (weatherEnum) {
+              case 0:
+                return { weatherEnum: 0, name: 'None', icon: 'minus-circle', color: '#7588D7' }; //a3e8aa
+                break;
+              case 1:
+                let isDay = hour > 6 && hour < 20 ? true : false;
+                return { weatherEnum: 1, name: isDay ? 'Sun' : 'Moon', icon: isDay ? 'sun-o' : 'moon-o', color: '#75d79f' }; // color: isDay ? '#d39d52' : '#8e95b3'
+                break;
+              case 2:
+                return { weatherEnum: 2, name: 'Rain', icon: 'tint', color: '#75d79f' }; //a3d0e8
+                break;
+              case 3:
+                return { weatherEnum: 3, name: 'Snow', icon: 'snowflake-o', color: '#75d79f' }; // f0f0f0
+                break;
+              default:
+                return { weatherEnum: null, name: 'Unknown', icon: 'question-circle', color: '#FF8AB8' }; // eee990
+                break;
+            }
+          },
+          calcFullDayArray: function (offset = 0) {
+            let offsetIndex = (this.weatherIndex() + offset) % 23;
+            let weather = this.weatherArray.concat(this.weatherArray).slice(offsetIndex, offsetIndex + 24);
+
+            return weather.map((weatherEnum, index) => this.calcWeatherObject(weatherEnum, index));
+          },
+          saveNewWeather: function () {
+            let newArray = [...this.weatherArray];
+            let offsetIndex = (this.activeSlot + this.weatherIndex()) % 23;
+
+            newArray[offsetIndex] = this.selectedWeather;
+            this.weatherArray = newArray;
+
+            localStorage.setItem('weather', JSON.stringify(this.weatherArray));
+          },
+          resetWeather: function (dialogText = 'Reset all saved weather information?') {
+            if (confirm(dialogText)) {
+              this.weatherArray = new Array(23).fill(null);
+              localStorage.setItem('weather', JSON.stringify(this.weatherArray));
+              localStorage.removeItem('fistSave');
+              localStorage.removeItem('currentMonth');
+              window.location.reload();
+            }
+          },
+          weatherIndex: function () {
+            let today = new Date();
+            let todayMs = new Date(new Date(today).toDateString()).getTime();
+
+            let currentMonth = today.getMonth();
+            let savedMonth = localStorage.getItem('currentMonth');
+
+            if (!savedMonth) {
+              localStorage.setItem('currentMonth', currentMonth);
+              savedMonth = currentMonth;
+            }
+
+            if (savedMonth != currentMonth && this.triggerResetMonthData) {
+              this.triggerResetMonthData = false;
+              this.resetWeather('We have a new month and new slots. Reset old data?');
+            }
+
+            if (!localStorage.getItem('fistSave')) {
+              localStorage.setItem('fistSave', todayMs);
+            }
+
+            let offsetDayMs = new Date(+localStorage.getItem('fistSave')).getTime();
+
+            // One day in milliseconds 86.400.000
+            const oneDay = 1000 * 60 * 60 * 24;
+
+            // Calculating the time difference between two dates
+            const diffInTime = todayMs - offsetDayMs;
+
+            // Calculating the no. of days between two dates
+            const diffInDays = Math.round(diffInTime / oneDay);
+            // console.log('diffInTime', diffInTime);
+            // console.log('todayMs', todayMs);
+            // console.log('offsetDayMs', offsetDayMs);
+            // console.log('diffInDays', diffInDays);
+            // console.log('diffInDays 23', diffInDays % 23);
+            return diffInDays % 23;
+          },
+          getRemanningDaysInMonth: function () {
+            var date = new Date();
+            var time = new Date(date.getTime());
+
+            time.setMonth(date.getMonth() + 1);
+            time.setDate(0);
+            return time.getDate() > date.getDate() ? time.getDate() - date.getDate() : 0;
+            // return 5;
+          },
+        },
+        created() {
+          this.setActiveSlot();
+        },
+      });
+    </script>
+    <style type="text/css">
+      body {
+        color: #444655;
+        font-family: Helvetica, Arial, sans-serif;
+        font-size: 12px;
+      }
+
+      ul {
+        list-style-type: none;
+        margin: 0;
+        padding: 0;
+      }
+
+      h3 {
+        margin-bottom: 5px;
+      }
+
+      .section {
+        clear: both;
+        overflow: hidden;
+        padding: 10px 5px;
+      }
+
+      .selection {
+        display: flex;
+        align-items: center;
+      }
+
+      .weather-list .slot {
+        list-style-type: none;
+        width: calc(100% / 6);
+        float: left;
+        padding: 3px;
+        box-sizing: border-box;
+        margin: 8px 0;
+        opacity: 0.7;
+      }
+
+      .weather-list .slot.selected {
+        opacity: 1;
+      }
+
+      .weather-list .icon {
+        display: block;
+        border: 1px solid #f7f8ff;
+        border-bottom: none;
+        text-align: center;
+        padding: 7px;
+        opacity: 0.6;
+
+        -webkit-border-top-left-radius: 15px;
+        -webkit-border-top-right-radius: 15px;
+        -moz-border-radius-topleft: 15px;
+        -moz-border-radius-topright: 15px;
+        border-top-left-radius: 15px;
+        border-top-right-radius: 15px;
+      }
+
+      .weather-list .icon .fa {
+        font-size: 18px;
+        color: #fff;
+      }
+
+      .weather-list .slot.selected .icon {
+        opacity: 1;
+      }
+
+      .weather-list .slot.selected .icon .fa {
+        color: #444655;
+      }
+
+      .weather-list .time {
+        display: block;
+        border: 1px solid #e8e8ee;
+        text-align: center;
+        padding: 4px 0;
+        border-top: none;
+        background-color: #f7f8ff;
+      }
+
+      .weather-list .time .fa {
+        margin-right: 6px;
+        color: #797979;
+      }
+
+      .forecast {
+        /* display: flex; */
+      }
+
+      .forecast-list {
+        float: left;
+        padding-right: 10px;
+      }
+
+      .forecast-list--legend {
+        width: 40px;
+      }
+
+      .forecast-icon {
+        padding: 5px;
+        border-radius: 20px;
+        display: inline-block;
+        width: 15px;
+        height: 14px;
+        text-align: center;
+        margin: 5px 3px;
+        white-space: nowrap;
+      }
+      .forecast-icon .fa {
+        line-height: 14px;
+      }
+      .forecast-icon.inactive {
+        opacity: 0.7;
+        color: #fff;
+        background-color: #a8a8a8 !important;
+      }
+
+      .warning-icon span.forecast-icon {
+        background-color: #dfdfdf !important;
+      }
+
+      .selection .forecast-icon {
+        width: 25px;
+        height: 25px;
+        margin: 5px 3px;
+      }
+
+      .selection .forecast-icon .fa {
+        line-height: 25px;
+        font-size: 16px;
+      }
+
+      .button {
+        display: inline-block;
+        margin-left: auto;
+        padding: 10px 15px;
+        background-color: #f7f8ff;
+        border: 1px solid #e8e8ee;
+        box-shadow: rgb(0 0 0 / 15%) 1.95px 1.95px 2.6px;
+        border-radius: 20px;
+      }
+
+      .forecast-title {
+        margin: 10px 0 10px 45px;
+      }
+
+      .forecast-title span {
+        width: 41px;
+        text-align: center;
+        display: inline-block;
+      }
+    </style>
+  </body>
+</html>
