@@ -26,6 +26,7 @@
             :class="index == activeSlot ? 'selected' : ''"
             @click="setActiveSlot(weatherSlot.weatherEnum, index)"
           >
+            <i v-if="weatherSlot.verify" class="verify-icon fa fa-question-circle"></i>
             <span class="icon" :style="`background-color: ${weatherSlot.color}; border-color: ${weatherSlot.color}`"
               ><i :class="`fa fa-${weatherSlot.icon}`"></i
             ></span>
@@ -52,19 +53,14 @@
       </div>
       <div class="section">
         <div class="forecast-title">
-          <span v-for="index in 6" :key="index"
-            >{{dayNames[(index + todayPointer) % 7]}}</span
-          >
+          <span v-for="index in 6" :key="index">{{dayNames[(index + todayPointer) % 7]}}</span>
         </div>
         <ul class="forecast-list forecast-list--legend">
           <li class="forecast-list__item" v-for="index in 24" :key="index">
             <span class="forecast-icon"><i class="fa fa-clock-o"></i> {{index - 1}}</span>
           </li>
         </ul>
-        <ul
-          class="forecast-list"
-          v-for="(forecastDay, index) in forecast"
-        >
+        <ul class="forecast-list" v-for="(forecastDay, index) in forecast">
           <li class="forecast-list__item" v-for="(forecastSlot, index) in forecastDay">
             <span class="forecast-icon" :style="`background-color: ${forecastSlot.color}; border-color: ${forecastSlot.color}`"
               ><i :class="`fa fa-${forecastSlot.icon}`"></i
@@ -74,7 +70,15 @@
       </div>
       <div class="section">
         <h3>Configuration</h3>
-        <div>
+        <div class="action-area">
+          <p>
+            All saved slots are marked with a ? to verify the slot again without loosing stored information. Use this if you
+            noticed one wrong weather slot.
+          </p>
+          <a class="button" @click="verifyWeather('Verify all saved weather information?')">Verify all Data</a>
+        </div>
+        <div class="action-area">
+          <p>Reset all slots to start over tracking your weather. Use this if if you noticed few wrong ewather slots.</p>
           <a class="button" @click="resetWeather('Reset all saved weather information?')">RESET all Data</a>
         </div>
         <div>Initial data saved: {{initialSave}}</div>
@@ -86,8 +90,7 @@
       var app = new Vue({
         el: '#app',
         data: {
-          weatherArray: JSON.parse(localStorage.getItem('weather')) || new Array(23).fill(null), // none = 0, sun/moon = 1, rain = 2, snow= 3,  unknown= null
-
+          weatherArray: JSON.parse(localStorage.getItem('weather')) || new Array(23).fill({ status: null, verify: false }), // none = 0, sun/moon = 1, rain = 2, snow= 3,  unknown= null
           activeSlot: 0,
           selectedWeather: null,
           dayNames: ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'],
@@ -107,11 +110,11 @@
           },
           changeWeatherSelection: function () {
             return [
-              this.calcWeatherObject(null, this.activeSlot),
-              this.calcWeatherObject(0, this.activeSlot),
-              this.calcWeatherObject(1, this.activeSlot),
-              this.calcWeatherObject(2, this.activeSlot),
-              this.calcWeatherObject(3, this.activeSlot),
+              this.calcWeatherObject({ status: null, verify: false }, this.activeSlot),
+              this.calcWeatherObject({ status: 0, verify: false }, this.activeSlot),
+              this.calcWeatherObject({ status: 1, verify: false }, this.activeSlot),
+              this.calcWeatherObject({ status: 2, verify: false }, this.activeSlot),
+              this.calcWeatherObject({ status: 3, verify: false }, this.activeSlot),
             ];
           },
           forecast: function () {
@@ -142,22 +145,34 @@
             }
           },
           calcWeatherObject: function (weatherEnum, hour) {
-            switch (weatherEnum) {
+            switch (weatherEnum.status) {
               case 0:
-                return { weatherEnum: 0, name: 'None', icon: 'minus-circle', color: '#7588D7' }; //a3e8aa
+                return { weatherEnum: 0, verify: weatherEnum.verify, name: 'None', icon: 'minus-circle', color: '#7588D7' }; //a3e8aa
                 break;
               case 1:
                 let isDay = hour > 6 && hour < 20 ? true : false;
-                return { weatherEnum: 1, name: isDay ? 'Sun' : 'Moon', icon: isDay ? 'sun-o' : 'moon-o', color: '#75d79f' }; // color: isDay ? '#d39d52' : '#8e95b3'
+                return {
+                  weatherEnum: 1,
+                  verify: weatherEnum.verify,
+                  name: isDay ? 'Sun' : 'Moon',
+                  icon: isDay ? 'sun-o' : 'moon-o',
+                  color: '#75d79f',
+                }; // color: isDay ? '#d39d52' : '#8e95b3'
                 break;
               case 2:
-                return { weatherEnum: 2, name: 'Rain', icon: 'tint', color: '#75d79f' }; //a3d0e8
+                return { weatherEnum: 2, verify: weatherEnum.verify, name: 'Rain', icon: 'tint', color: '#75d79f' }; //a3d0e8
                 break;
               case 3:
-                return { weatherEnum: 3, name: 'Snow', icon: 'snowflake-o', color: '#75d79f' }; // f0f0f0
+                return { weatherEnum: 3, verify: weatherEnum.verify, name: 'Snow', icon: 'snowflake-o', color: '#75d79f' }; // f0f0f0
                 break;
               default:
-                return { weatherEnum: null, name: 'Unknown', icon: 'question-circle', color: '#FF8AB8' }; // eee990
+                return {
+                  weatherEnum: null,
+                  verify: weatherEnum.verify,
+                  name: 'Unknown',
+                  icon: 'question-circle',
+                  color: '#FF8AB8',
+                }; // eee990
                 break;
             }
           },
@@ -171,18 +186,28 @@
             let newArray = [...this.weatherArray];
             let offsetIndex = (this.activeSlot + this.weatherIndex()) % 23;
 
-            newArray[offsetIndex] = this.selectedWeather;
+            newArray[offsetIndex] = { status: this.selectedWeather, verify: false };
             this.weatherArray = newArray;
 
             localStorage.setItem('weather', JSON.stringify(this.weatherArray));
           },
           resetWeather: function (dialogText = 'Reset all saved weather information?') {
             if (confirm(dialogText)) {
-              this.weatherArray = new Array(23).fill(null);
+              this.weatherArray = new Array(23).fill({ status: null, verify: false });
+
               localStorage.setItem('weather', JSON.stringify(this.weatherArray));
               localStorage.removeItem('fistSave');
               localStorage.removeItem('currentMonth');
               window.location.reload();
+            }
+          },
+          verifyWeather: function (dialogText) {
+            if (confirm(dialogText)) {
+              this.weatherArray = this.weatherArray.map((slot) => {
+                return { status: slot.status, verify: slot.status !== null };
+              });
+
+              localStorage.setItem('weather', JSON.stringify(this.weatherArray));
             }
           },
           weatherIndex: function () {
@@ -229,6 +254,9 @@
           },
         },
         created() {
+          if (typeof this.weatherArray[0] !== 'object') {
+            this.resetWeather();
+          }
           this.setActiveSlot();
         },
       });
@@ -269,6 +297,18 @@
         box-sizing: border-box;
         margin: 8px 0;
         opacity: 0.7;
+        position: relative;
+      }
+
+      .verify-icon {
+        position: absolute;
+        z-index: 5;
+        color: rgb(255, 138, 184);
+        border-radius: 10px;
+        padding: 4px;
+        right: 0%;
+        top: 0;
+        background: #fff;
       }
 
       .weather-list .slot.selected {
@@ -363,6 +403,8 @@
 
       .button {
         display: inline-block;
+        margin-top: 5px;
+        margin-bottom: 5px;
         margin-left: auto;
         padding: 10px 15px;
         background-color: #f7f8ff;
@@ -379,6 +421,20 @@
         width: 41px;
         text-align: center;
         display: inline-block;
+      }
+
+      .action-area {
+        display: flex;
+        flex-wrap: nowrap;
+        flex-direction: row;
+        align-content: center;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .action-area > .button {
+        white-space: nowrap;
+        margin-left: 10px;
       }
     </style>
   </body>
