@@ -81,6 +81,13 @@
           <p>Reset all slots to start over tracking your weather. Use this if if you noticed few wrong weather slots.</p>
           <a class="button" @click="resetWeather('Reset all saved weather information?')">RESET all Data</a>
         </div>
+        <div class="action-area">
+          <p>When save a specific weather set adjacent slots to "no weather".</p>
+          <span class="split-button">
+            <a class="button" :class="{'active': hasAdjacentSlots}" @click="setAdjacentSlots(true)">Yes</a>
+            <a class="button" :class="{'active': !hasAdjacentSlots}" @click="setAdjacentSlots(false)">No</a>
+          </span>
+        </div>
         <div>Initial data saved: {{initialSave}}</div>
         <div>Month: {{initialMonth}}</div>
       </div>
@@ -95,6 +102,7 @@
           selectedWeather: null,
           dayNames: ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'],
           triggerResetMonthData: true,
+          hasAdjacentSlots: localStorage.getItem('adjacentSlots') == 'true' ? true : false,
         },
         computed: {
           initialSave: function () {
@@ -182,11 +190,33 @@
 
             return weather.map((weatherEnum, index) => this.calcWeatherObject(weatherEnum, index));
           },
+          getSiblingOffsetSlotNumber: function (slotNumber) {
+            return (this.activeSlot + this.weatherIndex()) % 23;
+          },
           saveNewWeather: function () {
             let newArray = [...this.weatherArray];
             let offsetIndex = (this.activeSlot + this.weatherIndex()) % 23;
 
             newArray[offsetIndex] = { status: this.selectedWeather, verify: false };
+
+            if (this.hasAdjacentSlots && this.selectedWeather) {
+              let defaultSlotConfig = { status: 0, verify: true };
+
+              function setSlot(slot) {
+                let index = (slot + 23) % 23;
+
+                if (!newArray[index].status) {
+                  newArray[index] = { status: 0, verify: false };
+                } else {
+                  newArray[index].verify = true;
+                }
+              }
+
+              [offsetIndex - 2, offsetIndex - 1, offsetIndex + 1, offsetIndex + 2].forEach((s) => {
+                setSlot(s);
+              });
+            }
+
             this.weatherArray = newArray;
 
             localStorage.setItem('weather', JSON.stringify(this.weatherArray));
@@ -200,6 +230,10 @@
               localStorage.removeItem('currentMonth');
               window.location.reload();
             }
+          },
+          setAdjacentSlots: function (isActive = false) {
+            this.hasAdjacentSlots = isActive;
+            localStorage.setItem('adjacentSlots', isActive);
           },
           verifyWeather: function (dialogText) {
             if (confirm(dialogText)) {
@@ -411,6 +445,26 @@
         border: 1px solid #e8e8ee;
         box-shadow: rgb(0 0 0 / 15%) 1.95px 1.95px 2.6px;
         border-radius: 20px;
+      }
+
+      .split-button {
+        white-space: nowrap;
+      }
+
+      .split-button a {
+        border-radius: 0 20px 20px 0;
+      }
+
+      .split-button a:first-child {
+        border-radius: 20px 0 0 20px;
+        margin-right: -5px;
+      }
+
+      .split-button a.active {
+        background-color: #a1a3b4;
+        color: #fff;
+        box-shadow: none;
+        border-color: #a1a3b4;
       }
 
       .forecast-title {
